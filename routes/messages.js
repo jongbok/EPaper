@@ -106,7 +106,7 @@ router.post('/', function(req, res, next){
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
 			if(err) { throw err; }
-			connection.beginTransaction(function(err) {{
+			connection.beginTransaction(function(err) {
 				if(err) { throw err; }
 				var afterTransaction = config.afterTransaction(connection, res);
 				async.waterfall([
@@ -119,7 +119,7 @@ router.post('/', function(req, res, next){
 							}
 							if(results[0].paper_coin < paper_cnt){
 								throw new Error('코인이 부족해서 발송할 수 없습니다.[요청:' 
-									+ paper_cnt + ', 보유:' + (results[0].paper_coin + ']');
+									+ paper_cnt + ', 보유:' + results[0].paper_coin + ']');
 							}
 							console.log('message send:: select user info success');
 							callback(null, results[0]);

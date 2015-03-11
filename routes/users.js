@@ -14,7 +14,8 @@ var query = {
         updateRegIdAndLocation : "update users \n"
                 + "set registration_id = ? \n"
                 + ",latitude = ? \n"
-                + ",longitude = ?"
+                + ",longitude = ? \n"
+		+ ",update_dt = NOW() \n"
                 + "where id = ?",
         insert : "insert into users(phone_no, registration_id, latitude, longitude) \n"
                 + "values(?, ?, ?, ?)",
@@ -108,8 +109,8 @@ router.post('/', function(req, res, next){
 	});
 });
 
-router.post('/reject', function(req, res, next){
-	var user_id = req.param('user_id');
+router.post('/:id/reject', function(req, res, next){
+	var user_id = req.params.id;
 	var phone_no = req.param('phone_no');
 
 	trycatch(function(){
@@ -137,8 +138,6 @@ router.post('/reject', function(req, res, next){
 				], afterTransaction );
 			});
 		});
-	});
-
 	},
 	function(err){
 		console.error('reject:: error!\n', err.stack);
@@ -146,8 +145,8 @@ router.post('/reject', function(req, res, next){
 	});
 });
 
-router.post('/charge', function(req, res, next){
-	var user_id = req.param('user_id');
+router.post('/:id/charge', function(req, res, next){
+	var user_id = req.params.id;
 	var coin_id = req.param('coin_id');
 	var paper_cnt = req.param('paper_cnt');
 
@@ -185,8 +184,8 @@ router.post('/charge', function(req, res, next){
 
 });
 
-router.put('/', function(req, res, next){
-	var user_id = req.param('user_id');
+router.put('/:id', function(req, res, next){
+	var user_id = req.params.id;
 	var sex = req.param('sex');
 	var age = req.param('age');
 
@@ -213,8 +212,8 @@ router.put('/', function(req, res, next){
 
 });
 
-router.put('/resetReject', function(req, res, next){
-	var user_id = req.param('user_id');
+router.delete('/:id/reject', function(req, res, next){
+	var user_id = req.params.id;
 	
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
