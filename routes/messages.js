@@ -3,7 +3,9 @@ var router = express.Router();
 var mysql = require('mysql');
 var config = require('../config');
 var gcm = require('node-gcm');
-var connection = mysql.createConnection(config.mysql);
+var async = require('async');
+var trycatch = require('trycatch');
+var pool = mysql.createPool(config.mysql);
 var sender = new gcm.Sender(config.gcm.senderId);
 
 var query = {
@@ -45,22 +47,36 @@ var query = {
 /* 로딩시 또는 Push가 왔을 경우 안받은 메세지 정보조회 */
 router.get('/:user_id', function(req, res, next){
 	var user_id = req.params.user_id;
-	
-	connection.connect();
-	var args = [user_id];
-	connection.query(query.selectReceive, args, function(err, results){
-		if(err) { throw err; }
-		console.log('message recevie:: select success');
 
-		var args = [];
-		for(var i=0; i<results.length; i++){
-			args.push([results[i].id, user_id]);
-		}
-		connection.query(query.updateReceive, args, function(err, result){
+	trycatch(function(){	
+		pool.getConnection(function(err, connection) {
 			if(err) { throw err; }
-			connection.end();
-			res.json(results);
-		});	
+			connection.beginTransaction(function(err) {
+				if(err) { throw err; }
+				var afterTransaction = config.afterTransaction(connection, res);
+				var args = [user_id];
+				connection.query(query.selectReceive, args, function(err, results){	
+					if(err){ throw err; }
+					console.log('message recevie:: select success');
+					var fns = [];
+					for(var i=0; i<results.length; i++){
+						fns.push(function(callback){
+							var args = [[results[i].message_id, user_id]];
+							connection.query(query.updateReceive, args, function(err, result){
+								if(err) { throw err; }
+								callback(null);
+							});
+						});
+					}
+					async.parallel(fns, afterTransaction);
+				});
+					
+			});	
+		});
+	},
+	function(err){
+		console.error('message recevie:: error!', err.stack);
+		res.json({result:'fail', message: err.message});
 	});
 });
 
@@ -79,7 +95,6 @@ router.post('/', function(req, res, next){
 	var paper_cnt = req.param('paper_cnt');
 	var content = req.param('content');
 
-	connection.connect();
 	var ages = [];
 	if(age1 === '1') { ages.push(10); }
 	if(age2 === '1') { ages.push(20); }
@@ -88,65 +103,88 @@ router.post('/', function(req, res, next){
 	if(age5 === '1') { ages.push(50); }
 	if(age6 === '1') { ages.push(60); }
 
-	var args = [user_id];
-	connection.query(query.selectPaperCoin, args, function(err, results){
-		if(err){ throw err; }
-		if(!results || results.length !== 1){
-			throw new Error('message send:: 사용자정보가 존재하지 않습니다.');
-		}
-		if(results[0].paper_coin < paper_cnt){
-			throw new Error('message sned:: 코인이 부족해서 발송할 수 없습니다.');
-		}
-
-		var latitude = results[0].latitude;
-		var longitude = results[0].longitude;
-		var query_distance = '';
-		if(distance && distance > 0){
-			query_distance = "        and ( 6371 * acos( cos( radians(" + connection.escape(latitude) + ") ) * cos( radians( latitude ) ) \n";
-			query_distance += "          * cos( radians( longitude ) - radians(" + connection.escape(longitude) + ") ) \n";
-			query_distance += "          + sin( radians(" + connection.escape(latitude) + ") ) * sin( radians( latitude ) ) ) ) * 1000 < " + connection.escape(distance) + " \n";
-		}
-		
-		var query_age = '';
-		if(ages && ages.length > 0){
-			var tx_age = ages.join("','");
-			query_age = "        and age in('" + tx_age + "', 0) \n";
-		}
-
-		var query_sex = '';
-		if(sex){
-			query_sex = "        and sex in(" + connection.escape(sex) + ",'A')";
-		}
-
-		var args = [user_id, query_distance, query_age, query_sex, paper_cnt];
-		connection.query(query.getSelectSend, args, function(err, results){
-			if(err){ throw err; }
-			var message = new gcm.Message({
-				collapseKey: 'EPaperNotification',
-  				delayWhileIdle: true,
-  				timeToLive: 3,
-				data: {
-					title: '번개전단 메세지',
-					message: content,
-					msgcnt: 3
-				}
-			});	
-			
-			if(!results || results.length < 1){
-				throw new Error('message send:: 조건에 해당하는 사용자가 존재하지 않습니다.');
-			}
-			
-			var registrationIds = [];
-			for(var i=0; i<results.length; i++){
-				registrationIds.push(results[i].registration_id);	
-			}
-			sender.send(message, registrationIds, 4, function(err, result){
+	trycatch(function(){
+		pool.getConnection(function(err, connection) {
+			if(err) { throw err; }
+			connection.beginTransaction(function(err) {{
 				if(err) { throw err; }
-				console.log('message send:: gcm push success');
-			});
+				var afterTransaction = config.afterTransaction(connection, res);
+				async.waterfall([
+					function(callback){
+						var args = [user_id];
+						connection.query(query.selectPaperCoin, args, function(err, results){
+							if(err) { throw err; }
+							if(!results || results.length !== 1){
+								throw new Error('사용자정보가 존재하지 않습니다.[' + user_id + ']');
+							}
+							if(results[0].paper_coin < paper_cnt){
+								throw new Error('코인이 부족해서 발송할 수 없습니다.[요청:' 
+									+ paper_cnt + ', 보유:' + (results[0].paper_coin + ']');
+							}
+							console.log('message send:: select user info success');
+							callback(null, results[0]);
+						});
+					},
+					function(user, callback){
+						var latitude = user.latitude;
+						var longitude = user.longitude;
+						var query_distance = "";
+						if(distance && distance > 0){
+							query_distance = "        and ( 6371 * acos( cos( radians(" + connection.escape(latitude) + ") ) * cos( radians( latitude ) ) \n";
+							query_distance += "          * cos( radians( longitude ) - radians(" + connection.escape(longitude) + ") ) \n";
+							query_distance += "          + sin( radians(" + connection.escape(latitude) + ") ) * sin( radians( latitude ) ) ) ) * 1000 < " + connection.escape(distance) + " \n";
+						}
+
+						var query_age = "";
+						if(ages && ages.length > 0){
+							var tx_age = ages.join("','");
+							query_age = "        and age in('" + tx_age + "', 0) \n";
+						}
+
+						var query_sex = "";
+						if(sex){
+							query_sex = "        and sex in(" + connection.escape(sex) + ",'A')";
+						}
+						var args = [user_id, query_distance, query_age, query_sex, paper_cnt];
+						connection.query(query.getSelectSend, args, function(err, results){
+							if(err) { throw err; }
+							if(!results || results.length < 1){
+								throw new Error('조건에 해당하는 사용자가 존재하지 않습니다.');
+							}
+							console.log('message send:: select target list success');
+							callback(null, results);
+						});
+					},
+					function(targetList, callback){
+						var message = new gcm.Message({
+							collapseKey: 'EPaperNotification',
+							delayWhileIdle: true,
+							timeToLive: 3,
+							data: {
+								title: '번개전단 메세지',
+								message: content,
+								msgcnt: 3
+							}
+						});
+						var registrationIds = [];
+						for(var i=0; i<targetList.length; i++){
+							registrationIds.push(results[i].registration_id);
+						}
+						sender.send(message, registrationIds, 4, function(err, result){
+							if(err) { throw err; }
+							console.log('message send:: gcm push success');
+							callback(null, {result:'success', send_count: registrationIds.length});
+						});
+					}
+				], afterTransaction);
+			});	
 		});
-	});	
-	res.send('ok');
+	},
+	function(err){
+		console.error('message send:: error!', err.stack);
+		res.json({result:'fail', message: err.message});
+	});
+
 });
 
 module.exports = router;
