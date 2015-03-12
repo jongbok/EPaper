@@ -45,10 +45,10 @@ var query = {
 
 /* GET users listing. */
 router.post('/', function(req, res, next){
-	var registration_id = req.param('registration_id');
-	var phone_no = req.param('phone_no');
-	var latitude = req.param('latitude');
-	var longitude = req.param('longitude');
+	var registration_id = req.body.registration_id;
+	var phone_no = req.body.phone_no;
+	var latitude = req.body.latitude;
+	var longitude = req.body.longitude;
 
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
@@ -111,7 +111,7 @@ router.post('/', function(req, res, next){
 
 router.post('/:id/reject', function(req, res, next){
 	var user_id = req.params.id;
-	var phone_no = req.param('phone_no');
+	var phone_no = req.body.phone_no;
 
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
@@ -147,10 +147,31 @@ router.post('/:id/reject', function(req, res, next){
 
 router.post('/:id/charge', function(req, res, next){
 	var user_id = req.params.id;
-	var coin_id = req.param('coin_id');
-	var paper_cnt = req.param('paper_cnt');
+	var coin_id = req.body.coin_id;
+	var paper_cnt = 0;
 
 	trycatch(function(){
+		switch(coin_id){
+			case 'paper_coin_50': 
+				paper_cnt = 50;
+				break;
+			case 'paper_coin_100':
+				paper_cnt = 100;
+				break;
+			case 'paper_coin_500':
+				paper_cnt = 500; 
+				break;
+			case 'paper_coin_1000':
+				paper_cnt = 1000;
+				break;
+			case 'paper_coin_5000':
+				paper_cnt = 5000;
+				break;
+			case 'paper_coin_10000':
+				paper_cnt = 10000;
+				break;
+		}
+
 		pool.getConnection(function(err, connection) {
 			if(err){ throw err; }
 			connection.beginTransaction(function(err){
@@ -186,8 +207,8 @@ router.post('/:id/charge', function(req, res, next){
 
 router.put('/:id', function(req, res, next){
 	var user_id = req.params.id;
-	var sex = req.param('sex');
-	var age = req.param('age');
+	var sex = req.body.sex;
+	var age = req.body.age;
 
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
