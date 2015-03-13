@@ -13,8 +13,8 @@ var query = {
                 + "     or registration_id = ?",
         updateRegIdAndLocation : "update users \n"
                 + "set registration_id = ? \n"
-                + ",latitude = ? \n"
-                + ",longitude = ? \n"
+                + ",latitude = ifnull(?, latitude) \n"
+                + ",longitude = ifnull(?, longitude) \n"
 		+ ",update_dt = NOW() \n"
                 + "where id = ?",
         insert : "insert into users(phone_no, registration_id, latitude, longitude) \n"
@@ -59,7 +59,9 @@ router.post('/', function(req, res, next){
 					connection.query(query.selectByPhoneNoOrRegistrationId, args, function(err, results){
 						if(err) { throw err; }
 						if(results && results.length > 1){
-							throw new Error('중복된 사용자가 존재합니다.');	
+							var err = new Error('중복된 사용자가 존재합니다.');	
+							err.type = 'user';
+							throw err;
 						}
 						callback(null, results && results.length > 0? results[0]: null);
 					});

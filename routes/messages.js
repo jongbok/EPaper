@@ -11,7 +11,7 @@ var sender = new gcm.Sender(config.gcm.senderId);
 var query = {
 	selectReceive : "select \n"
 		+ "	  a.phone_no \n"
-		+ "	, DATE_FORMAT(a.create_dt, '%Y-%m-%d %H:%m:%s') as create_dt \n"
+		+ "	, DATE_FORMAT(a.create_dt, '%Y-%m-%d %H:%i:%s') as create_dt \n"
 		+ "	, a.content \n"
 		+ "	, b.message_id \n"
 		+ "	, b.user_id \n"
@@ -44,7 +44,7 @@ var query = {
 		if(sex){
 			sql += "        and sex in(" + sex + ",'A')";
 		}
-		sql += "LIMIT 0 , ?";
+		sql += "LIMIT ?";
 		return sql;
 	},
 	insert : "insert into messages(phone_no, sex, age1, age2, age3, age4, age5, age6, distance, paper_cnt, content) \n"
@@ -61,6 +61,17 @@ var query = {
 /* 로딩시 또는 Push가 왔을 경우 안받은 메세지 정보조회 */
 router.get('/:user_id', function(req, res, next){
 	var user_id = req.params.user_id;
+	function createUpdateFunction(args, connection){
+		return function(callback){
+			connection.query(query.updateReceive, args, function(err, result){
+				if(err) { 
+					callback(err); 
+				}else{
+					callback(null);
+				}
+			});
+		};
+	}
 
 	trycatch(function(){	
 		pool.getConnection(function(err, connection) {
@@ -75,13 +86,7 @@ router.get('/:user_id', function(req, res, next){
 					var fns = [];
 					for(var i=0; i<results.length; i++){
 						var args = [results[i].message_id, user_id];
-						fns.push(function(callback){
-							console.log('args::', args);
-							connection.query(query.updateReceive, args, function(err, result){
-								if(err) { throw err; }
-								callback(null);
-							});
-						});
+						fns.push(createUpdateFunction(args, connection));
 					}
 					fns.push(function(callback){
 						console.log('message recevie:: ' + JSON.stringify(results));
@@ -95,7 +100,7 @@ router.get('/:user_id', function(req, res, next){
 	},
 	function(err){
 		console.error('message recevie:: error!', err.stack);
-		res.send({result:'fail', message: err.message});
+		res.send({result:'fail'});
 	});
 });
 
@@ -122,6 +127,18 @@ router.post('/', function(req, res, next){
 	if(age5 === '1') { ages.push(50); }
 	if(age6 === '1') { ages.push(60); }
 
+	function createInsertMessageUserFunction(connection, args){
+		return function(callback){
+			connection.query(query.insertMessageUser, args, function(err, result){
+				if(err){
+					callback(err);
+				}else{
+					callback(null);
+				}
+			});
+		};
+	}
+
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
 			if(err) { throw err; }
@@ -137,8 +154,12 @@ router.post('/', function(req, res, next){
 								throw new Error('사용자정보가 존재하지 않습니다.[' + user_id + ']');
 							}
 							if(results[0].paper_coin < paper_cnt){
-								throw new Error('코인이 부족해서 발송할 수 없습니다.[요청:' 
-									+ paper_cnt + ', 보유:' + results[0].paper_coin + ']');
+								console.error('코인이 부족해서 발송할 수 없습니다.[id:' + user_id 
+										+ ',보유:' + results[0].paper_coin + ',요청:' + paper_cnt + ']');
+								var err = new Error('코인이 부족해서 발송할 수 없습니다.');
+								err.isCustom = true;
+								callback(err);
+								return;
 							}
 							console.log('message send:: select user info success');
 							callback(null, results[0]);
@@ -157,7 +178,11 @@ router.post('/', function(req, res, next){
 						 connection.query(sql, args, function(err, results){
 							if(err) { throw err; }
 							if(!results || results.length < 1){
-								throw new Error('조건에 해당하는 사용자가 존재하지 않습니다.');
+								console.error('조건에 해당하는 사용자가 존재하지 않습니다.[user_id:' + user_id + ']');
+								var err = new Error('조건에 해당하는 사용자가 존재하지 않습니다.');
+								err.isCustom = true;	
+								callback(err);
+								return;
 							}
 							console.log('message send:: select target list success');
 							callback(null, results);
@@ -175,16 +200,14 @@ router.post('/', function(req, res, next){
 						var fns = [];
 						for(var i=0; i<targetList.length; i++){
 							var args = [messageId, targetList[i].id];
-							fns.push(function(callback){
-								connection.query(query.insertMessageUser, args, function(err, result){
-									if(err) { throw err; }
-									callback(null);
-								});
-							});
+							fns.push(createInsertMessageUserFunction(connection, args));
 						}
 						async.parallel(fns, function(err, result){
-							if(err) { throw err; }
-							callback(null, targetList);
+							if(err) {
+								callback(err);
+							}else{ 
+								callback(null, targetList);
+							}
 						});
 					},
 					function(targetList, callback){
@@ -221,7 +244,7 @@ router.post('/', function(req, res, next){
 	},
 	function(err){
 		console.error('message send:: error!', err.stack);
-		res.json({result:'fail', message: err.message});
+		res.json({result:'fail'});
 	});
 
 });
