@@ -4,8 +4,10 @@ var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
+var dateFormat = require('dateformat');
+var config = require('./config');
 
-var routes = require('./routes/index');
+var rotatingLogStream = require('file-stream-rotator').getStream(config.express.logStream);
 var users = require('./routes/users');
 var messages = require('./routes/messages');
 
@@ -15,15 +17,18 @@ var app = express();
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
+logger.token('ldate', function getDate(){
+	return dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss");	
+});
+
 // uncomment after placing your favicon in /public
 //app.use(favicon(__dirname + '/public/favicon.ico'));
-app.use(logger('dev'));
+app.use(logger(config.express.logFormat, {stream: rotatingLogStream}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/', routes);
 app.use('/users', users);
 app.use('/messages', messages);
 
@@ -41,10 +46,8 @@ app.use(function(req, res, next) {
 if (app.get('env') === 'development') {
   app.use(function(err, req, res, next) {
     res.status(err.status || 500);
-    res.render('error', {
-      message: err.message,
-      error: err
-    });
+    console.error(JSON.stringify(err));
+    res.json({result:'fail', message: err.message});
   });
 }
 
@@ -52,10 +55,7 @@ if (app.get('env') === 'development') {
 // no stacktraces leaked to user
 app.use(function(err, req, res, next) {
   res.status(err.status || 500);
-  res.render('error', {
-    message: err.message,
-    error: {}
-  });
+  res.json({result:'fail', message: err.message});
 });
 
 module.exports = app;

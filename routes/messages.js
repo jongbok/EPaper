@@ -7,6 +7,7 @@ var async = require('async');
 var trycatch = require('trycatch');
 var pool = mysql.createPool(config.mysql);
 var sender = new gcm.Sender(config.gcm.senderId);
+var logger = config.getLogger();
 
 var query = {
 	selectReceive : "select \n"
@@ -41,7 +42,7 @@ var query = {
 			var tx_age = ages.join("','");
 			sql += "        and age in('" + tx_age + "', 0) \n";
 		}
-		if(sex){
+		if(sex && sex !== 'A'){
 			sql += "        and sex in(" + sex + ",'A')";
 		}
 		sql += "LIMIT ?";
@@ -82,14 +83,14 @@ router.get('/:user_id', function(req, res, next){
 				var args = [user_id];
 				connection.query(query.selectReceive, args, function(err, results){	
 					if(err){ throw err; }
-					console.log('message recevie:: select success');
+					logger.debug('message recevie:: select success![' + user_id + ']');
 					var fns = [];
 					for(var i=0; i<results.length; i++){
 						var args = [results[i].message_id, user_id];
 						fns.push(createUpdateFunction(args, connection));
 					}
 					fns.push(function(callback){
-						console.log('message recevie:: ' + JSON.stringify(results));
+						logger.debug('message recevie:: update recevei_yn success [' + user_id + ']'); 
 						callback(null, results);	
 					});
 					async.waterfall(fns, afterTransaction);
@@ -99,7 +100,7 @@ router.get('/:user_id', function(req, res, next){
 		});
 	},
 	function(err){
-		console.error('message recevie:: error!', err.stack);
+		logger.error('message recevie:: error![' + user_id + ']', err.stack);
 		res.send({result:'fail'});
 	});
 });
@@ -154,14 +155,14 @@ router.post('/', function(req, res, next){
 								throw new Error('사용자정보가 존재하지 않습니다.[' + user_id + ']');
 							}
 							if(results[0].paper_coin < paper_cnt){
-								console.error('코인이 부족해서 발송할 수 없습니다.[id:' + user_id 
+								logger.error('코인이 부족해서 발송할 수 없습니다.[id:' + user_id 
 										+ ',보유:' + results[0].paper_coin + ',요청:' + paper_cnt + ']');
 								var err = new Error('코인이 부족해서 발송할 수 없습니다.');
 								err.isCustom = true;
 								callback(err);
 								return;
 							}
-							console.log('message send:: select user info success');
+							logger.debug('message send:: select user info success[' + user_id + ']');
 							callback(null, results[0]);
 						});
 					},
@@ -178,13 +179,13 @@ router.post('/', function(req, res, next){
 						 connection.query(sql, args, function(err, results){
 							if(err) { throw err; }
 							if(!results || results.length < 1){
-								console.error('조건에 해당하는 사용자가 존재하지 않습니다.[user_id:' + user_id + ']');
+								logger.error('조건에 해당하는 사용자가 존재하지 않습니다.[user_id:' + user_id + ']');
 								var err = new Error('조건에 해당하는 사용자가 존재하지 않습니다.');
 								err.isCustom = true;	
 								callback(err);
 								return;
 							}
-							console.log('message send:: select target list success');
+							logger.debug('message send:: select target list success[' + user_id + ']');
 							callback(null, results);
 						});
 					},
@@ -192,7 +193,7 @@ router.post('/', function(req, res, next){
 						var args = [phone_no, sex, age1, age2, age3, age4, age5, age6, distance, paper_cnt, content];
 						connection.query(query.insert, args, function(err, result){
 							if(err) { throw err; }
-							console.log('message send:: insert message success!');
+							logger.debug('message send:: insert message success![' + user_id + ']');
 							callback(null, targetList, result.insertId);
 						});
 					},
@@ -234,7 +235,7 @@ router.post('/', function(req, res, next){
 						}
 						sender.send(message, registrationIds, 4, function(err, result){
 							if(err) { throw err; }
-							console.log('message send:: gcm push success');
+							logger.debug('message send:: gcm push success![' + user_id + ']');
 							callback(null, {result:'success', send_count: registrationIds.length});
 						});
 					}
@@ -243,7 +244,7 @@ router.post('/', function(req, res, next){
 		});
 	},
 	function(err){
-		console.error('message send:: error!', err.stack);
+		logger.error('message send:: error![' + user_id + ']', err.stack);
 		res.json({result:'fail'});
 	});
 

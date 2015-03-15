@@ -5,6 +5,7 @@ var config = require('../config');
 var async = require('async');
 var trycatch = require('trycatch');
 var pool = mysql.createPool(config.mysql);
+var logger = config.getLogger();
 
 var query = {
         selectByPhoneNoOrRegistrationId : "select *     \n"
@@ -15,6 +16,7 @@ var query = {
                 + "set registration_id = ? \n"
                 + ",latitude = ifnull(?, latitude) \n"
                 + ",longitude = ifnull(?, longitude) \n"
+		+ ",phone_no = ifnull(?, phone_no) \n"
 		+ ",update_dt = NOW() \n"
                 + "where id = ?",
         insert : "insert into users(phone_no, registration_id, latitude, longitude) \n"
@@ -63,23 +65,25 @@ router.post('/', function(req, res, next){
 							err.type = 'user';
 							throw err;
 						}
+						logger.debug('regist user:: select user success[' + phone_no + ']');
 						callback(null, results && results.length > 0? results[0]: null);
 					});
 				},
 				function(user, callback){
 					if(user){
-						var args = [registration_id, latitude, longitude, user.id];
+						var args = [registration_id, latitude, longitude, phone_no, user.id];
 						connection.query(query.updateRegIdAndLocation, args, function(err, result){
 							if(err) throw err;
-							console.log('regist user:: update success');
+							logger.debug('regist user:: update success[' + user.id + ']');
 							callback(null, user);
 						});
 					}else{
 						var args = [phone_no, registration_id, latitude, longitude];
 						connection.query(query.insert, args, function(err, result){
 							if(err) throw err;
-							console.log('regist user:: insert success');
-							var newUser = {id: result.insertId,
+							var user_id = result.insertId;
+							logger.debug('regist user:: insert success[' + user_id + ']');
+							var newUser = {id: user_id, 
 								phone_no: phone_no,
 								registration_id: registration_id,
 								latitude: latitude,
@@ -106,7 +110,7 @@ router.post('/', function(req, res, next){
 		});
 	},
 	function(err){
-		console.error('regist user:: error!\n', err.stack);
+		logger.error('regist user:: error! [' + phone_no + ']\n', err.stack);
 		res.json({result: 'fail', message:err.message});
 	});
 });
@@ -126,7 +130,7 @@ router.post('/:id/reject', function(req, res, next){
 						var args = [user_id, phone_no];
 						connection.query(query.insertReject, args, function(err, result){
 							if(err) { throw err; }
-							console.log('reject:: insert success');
+							logger.debug('reject:: insert success[' + user_id + ']');
 							callback(null);
 						});
 					},
@@ -142,7 +146,7 @@ router.post('/:id/reject', function(req, res, next){
 		});
 	},
 	function(err){
-		console.error('reject:: error!\n', err.stack);
+		logger.error('reject:: error! [' + user_id + ']\n', err.stack);
 		res.json({result:'fail', message: err.message});
 	});
 });
@@ -184,7 +188,7 @@ router.post('/:id/charge', function(req, res, next){
 						var args = [user_id, coin_id, paper_cnt];
 						connection.query(query.insertCharge, args, function(err, result){
 							if(err) { throw err; }
-							console.log('charge:: insert success');
+							logger.debug('charge:: insert success[' + user_id + ',' + coin_id + ']');
 							callback(null);
 						});
 					},
@@ -192,7 +196,7 @@ router.post('/:id/charge', function(req, res, next){
 						var args = [paper_cnt, user_id];
 						connection.query(query.increasePaperCoin, args, function(err, result){
 							if(err) { throw err; }
-							console.log('charge:: update success');
+							logger.debug('charge:: update success[' + user_id + ',' + coin_id + ']');
 							callback(null);
 						});
 					}
@@ -201,7 +205,7 @@ router.post('/:id/charge', function(req, res, next){
 		});
 	},
 	function(err){
-		console.error('charge:: error!\n', err.stack);
+		logger.error('charge:: error![' + user_id + ',' + coin_id + ']\n', err.stack);
 		res.json({result:'fail', message: err.message});
 	});
 
@@ -223,13 +227,13 @@ router.put('/:id', function(req, res, next){
 					throw err; 
 				}
 				connection.release();
-				console.log('user config:: update success');
+				logger.debug('user config:: update success[' + user_id + ']');
 				res.json({result:'success'});
 			});
 		});
 	},
 	function(err){
-		console.error('user config:: error!\n', err.stack);
+		logger.error('user config:: error![' + user_id + ']\n', err.stack);
 		res.json({result:'fail', message: err.message});
 	});
 
@@ -249,7 +253,7 @@ router.delete('/:id/reject', function(req, res, next){
 						var args = [user_id];
 						connection.query(query.deleteReject, args, function(err, result){
 							if(err) { throw err; }
-							console.log('reset reject:: delete success');
+							logger.debug('reset reject:: delete success[' + user_id + ']');
 							callback(null); 
 						});
 					},
@@ -257,7 +261,7 @@ router.delete('/:id/reject', function(req, res, next){
 						var args = [user_id];
 						connection.query(query.resetRejectCnt, args, function(err, result){
 							if(err) { throw err; }
-							console.log('reset reject:: update user success');
+							logger.debug('reset reject:: update user success[' + user_id + ']');
 							callback(null);
 						});
 					}
@@ -266,7 +270,7 @@ router.delete('/:id/reject', function(req, res, next){
 		});
 	},
 	function(err){
-		console.error('reset reject:: error!\n', err.stack);
+		logger.error('reset reject:: error![' + user_id + ']\n', err.stack);
 		res.json({result:'fail'});
 	});
 });
