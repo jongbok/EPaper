@@ -29,6 +29,44 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use(function(req, res, next){
+	var reqAuthToken = req.header('auth-tocken');
+	var reqTime = req.header('timestamp');
+	var authToken = config.express.authToken;
+	var currTime = new Date().getTime();
+	if(!reqAuthToken){
+		var err = new Error('invalid request1');
+		console.error('auth-token is empty!', err);
+		rotatingLogStream.write('auth error ### auth-token is empty!');
+		next(err);
+		return;
+	}
+	if(!reqTime){
+		var err = new Error('invalid request2!');
+		console.error('timestamp is empty!', err);
+		rotatingLogStream.write('auth error ### timestamp is empty!');
+		next(err);
+		return;
+	}
+	reqTime *= 1;
+	var gapTime = Math.abs(currTime - reqTime);
+	if(gapTime > (1000 * 60 * 3)){
+		var err = new Error('invalid request3!');
+		console.error('timestamp is expired!', err);
+		rotatingLogStream.write('auth error ### timestamp is expired!');
+		next(err);
+		return;
+	}
+	if(reqAuthToken !== authToken){
+		var err = new Error('invalid request4!');
+		console.error('auth-token is invalid!', err);
+		rotatingLogStream.write('auth error ### auth-token is invalid!');
+		next(err);
+		return;
+	}
+	next();
+});
+
 app.use('/users', users);
 app.use('/messages', messages);
 

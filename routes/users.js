@@ -12,6 +12,8 @@ var query = {
                 + "from users \n"
                 + "where phone_no = ? \n"
                 + "     or registration_id = ?",
+	selectById: "select * from users where id = ?",
+	updateLocation: "update users set latitude = ?, longitude = ?, update_dt =  NOW() where id = ?",
         updateRegIdAndLocation : "update users \n"
                 + "set registration_id = ? \n"
                 + ",latitude = ifnull(?, latitude) \n"
@@ -113,6 +115,48 @@ router.post('/', function(req, res, next){
 		logger.error('regist user:: error! [' + phone_no + ']\n', err.stack);
 		res.json({result: 'fail', message:err.message});
 	});
+});
+
+router.get('/:id', function(req, res, next){
+	var id = req.params.id;
+        trycatch(function(){
+                pool.getConnection(function(err, connection) {
+                        if(err) { throw err; }
+			connection.query(query.selectById, [id], function(err, results){
+				if(err){ throw err; };
+				logger.debug('get user by id:: success!['+ id + ']');
+				if(results.length < 1){
+					throw new Error('사용자정보가 존재하지 않습니다.');
+					return;
+				}
+				res.json(results[0]);
+			});
+		});
+	},
+	function(err){
+		logger.error('get user by id:: error! [' + id + ']\n', err.stack);	
+		res.json({result: 'fail'});
+	});
+});
+
+router.put('/:id/coords', function(req, res, next){
+	var id = req.params.id;
+	var latitude = req.body.latitude;
+	var longitude = req.body.longitude;
+        trycatch(function(){
+                pool.getConnection(function(err, connection) {
+                        if(err) { throw err; }
+			var args = [latitude, longitude, id];
+                        connection.query(query.updateLocation, args, function(err, result){
+                                if(err){ throw err; };
+                                res.json({result: 'success'});
+                        });
+                });
+        },
+        function(err){
+                logger.error('update coords:: error! [' + id + ']\n', err.stack);
+                res.json({result: 'fail'});
+        });
 });
 
 router.post('/:id/reject', function(req, res, next){
