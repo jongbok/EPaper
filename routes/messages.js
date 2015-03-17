@@ -190,7 +190,7 @@ router.post('/', function(req, res, next){
 						});
 					},
 					function(targetList, callback){
-						var args = [phone_no, sex, age1, age2, age3, age4, age5, age6, distance, paper_cnt, content];
+						var args = [phone_no, sex, age1, age2, age3, age4, age5, age6, distance, targetList.length, content];
 						connection.query(query.insert, args, function(err, result){
 							if(err) { throw err; }
 							logger.debug('message send:: insert message success![' + user_id + ']');

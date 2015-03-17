@@ -21,6 +21,10 @@ var query = {
 		+ ",phone_no = ifnull(?, phone_no) \n"
 		+ ",update_dt = NOW() \n"
                 + "where id = ?",
+	updateRegistrationId : "update users \n"
+		+ "set registration_id = ? \n"
+		+ ",update_dt = NOW() \n"
+		+ "where id = ?",
         insert : "insert into users(phone_no, registration_id, latitude, longitude) \n"
                 + "values(?, ?, ?, ?)",
         updateRejectCnt : "update users \n"
@@ -102,11 +106,8 @@ router.post('/', function(req, res, next){
 					}
 				} 
 			],function(err, result){
-				if(err){
-					connection.release();
-					throw err;
-				}
 				connection.release();
+				if(err){ throw err; }
 				res.json(result);
 			});
 		});
@@ -123,7 +124,8 @@ router.get('/:id', function(req, res, next){
                 pool.getConnection(function(err, connection) {
                         if(err) { throw err; }
 			connection.query(query.selectById, [id], function(err, results){
-				if(err){ throw err; };
+				connection.release();
+				if(err){ throw err; }
 				logger.debug('get user by id:: success!['+ id + ']');
 				if(results.length < 1){
 					throw new Error('사용자정보가 존재하지 않습니다.');
@@ -139,6 +141,26 @@ router.get('/:id', function(req, res, next){
 	});
 });
 
+router.put('/:id/registration_id', function(req, res, next){
+	var id = req.params.id;
+	var registration_id = req.body.registration_id;
+        trycatch(function(){
+                pool.getConnection(function(err, connection) {
+                        if(err) { throw err; }
+                        var args = [registration_id, id];
+                        connection.query(query.updateRegistrationId, args, function(err, result){
+                                connection.release();
+                                if(err){ throw err; };
+                                res.json({result: 'success'});
+                        });
+                });
+        },
+        function(err){
+                logger.error('update registration_id:: error! [' + id + ']\n', err.stack);
+                res.json({result: 'fail'});
+        });
+});
+
 router.put('/:id/coords', function(req, res, next){
 	var id = req.params.id;
 	var latitude = req.body.latitude;
@@ -148,6 +170,7 @@ router.put('/:id/coords', function(req, res, next){
                         if(err) { throw err; }
 			var args = [latitude, longitude, id];
                         connection.query(query.updateLocation, args, function(err, result){
+				connection.release();
                                 if(err){ throw err; };
                                 res.json({result: 'success'});
                         });
@@ -266,11 +289,8 @@ router.put('/:id', function(req, res, next){
 
 			var args = [sex, age, user_id];
 			connection.query(query.update, args, function(err, result){
-				if(err){ 
-					connection.release();
-					throw err; 
-				}
 				connection.release();
+				if(err){ throw err; }
 				logger.debug('user config:: update success[' + user_id + ']');
 				res.json({result:'success'});
 			});
