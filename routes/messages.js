@@ -25,7 +25,8 @@ var query = {
 		+ "where message_id = ? "
 		+ "	and user_id = ?",
 	selectPaperCoin : "select paper_coin, latitude, longitude from users where id = ?",
-	getSelectSend : function(distance, latitude, longitude, ages, sex){
+	getSelectSend : function(distance, latitude, longitude, ages, sex, connection){
+		logger.debug('sql make:: distance=' + distance + ',latitude' + latitude + ',longitude=' + longitude + ',sex=' + sex);
 		var sql =  "SELECT id, registration_id \n"
 			+ "FROM users a \n"
 			+ "where not exists(select 'x' \n"
@@ -33,16 +34,17 @@ var query = {
 			+ "		where a.id = b.user_id \n"
 			+ "			and b.reject_id = ?) \n";
 		if(distance && distance > 0){
-			sql += "        and ( 6371 * acos( cos( radians(" + latitude + ") ) * cos( radians( latitude ) ) \n";
-			sql += "          * cos( radians( longitude ) - radians(" + longitude + ") ) \n";
-			sql += "          + sin( radians(" + latitude + ") ) * sin( radians( latitude ) ) ) ) * 1000 < " + distance + " \n";
+			sql += "        and ( 6371 * acos( cos( radians(" + connection.escape(latitude) + ") ) * cos( radians( latitude ) ) \n";
+			sql += "          * cos( radians( longitude ) - radians(" + connection.escape(longitude) + ") ) \n";
+			sql += "          + sin( radians(" + connection.escape(latitude) + ") ) * sin( radians( latitude ) ) ) ) * 1000 < " + connection.escape(distance) + " \n";
 		}
 		if(ages && ages.length > 0){
-			var tx_age = ages.join("','");
-			sql += "        and age in('" + tx_age + "', 0) \n";
+			var tx_age = ages.join(',');
+			logger.debug('sql make:: tx_age=' + tx_age);
+			sql += "        and age in(" + tx_age + ", 0) \n";
 		}
 		if(sex && sex !== 'A'){
-			sql += "        and sex in(" + sex + ",'A')";
+			sql += "        and sex in(" + connection.escape(sex) + ",'A')";
 		}
 		sql += "LIMIT ?";
 		return sql;
@@ -109,23 +111,23 @@ router.post('/', function(req, res, next){
 	var user_id = req.body.user_id;
 	var phone_no = req.body.phone_no;
 	var sex = req.body.sex;
-	var age1 = req.body.age1;
-	var age2 = req.body.age2;
-	var age3 = req.body.age3;
-	var age4 = req.body.age4;
-	var age5 = req.body.age5;
-	var age6 = req.body.age6;
+	var age1 = req.body.age1 * 1;
+	var age2 = req.body.age2 * 1;
+	var age3 = req.body.age3 * 1;
+	var age4 = req.body.age4 * 1;
+	var age5 = req.body.age5 * 1;
+	var age6 = req.body.age6 * 1;
 	var distance = req.body.distance;
 	var paper_cnt = req.body.paper_cnt;
 	var content = req.body.content;
 
 	var ages = [];
-	if(age1 === '1') { ages.push(10); }
-	if(age2 === '1') { ages.push(20); }
-	if(age3 === '1') { ages.push(30); }
-	if(age4 === '1') { ages.push(40); }
-	if(age5 === '1') { ages.push(50); }
-	if(age6 === '1') { ages.push(60); }
+	if(age1 === 1) { ages.push(10); }
+	if(age2 === 1) { ages.push(20); }
+	if(age3 === 1) { ages.push(30); }
+	if(age4 === 1) { ages.push(40); }
+	if(age5 === 1) { ages.push(50); }
+	if(age6 === 1) { ages.push(60); }
 
 	function createInsertMessageUserFunction(connection, args){
 		return function(callback){
@@ -194,11 +196,12 @@ router.post('/', function(req, res, next){
 						var latitude = user.latitude;
 						var longitude = user.longitude;
 						var args = [user_id, paper_cnt];
-						var sql = query.getSelectSend(connection.escape(distance)
-									, connection.escape(latitude)
-									, connection.escape(longitude)
+						var sql = query.getSelectSend(distance * 1
+									, latitude * 1
+									, longitude * 1
 									, ages
-									, connection.escape(sex));
+									, sex
+									, connection);
 
 						 connection.query(sql, args, function(err, results){
 							if(err) { throw err; }
