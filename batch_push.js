@@ -4,7 +4,6 @@ var config = require('./config');
 var gcm = require('node-gcm');
 var async = require('async');
 var trycatch = require('trycatch');
-var sender = new gcm.Sender(config.gcm.senderId);
 
 var query = {
 	selectList: "select id, registration_id from users",
@@ -14,7 +13,8 @@ var query = {
                 + "values(?, ?)"
 	};
 var connection = mysql.createConnection(config.mysql);
-var content = fs.readFileSync('message.txt');
+var content = fs.readFileSync('message.txt').toString(); 
+console.log(content);
 
 function createInsertMessageUserFunction(connection, args){
 	return function(callback){
@@ -24,6 +24,33 @@ function createInsertMessageUserFunction(connection, args){
 				return;
 			}
 			callback(null);
+		});
+	};
+}
+
+function createSendGcmFunction(registrationIds){
+	var sender = new gcm.Sender(config.gcm.senderId);
+	var message = new gcm.Message({
+		collapseKey: 'EPaperNotification',
+		delayWhileIdle: true,
+		timeToLive: 3,
+		data: {
+			title: '번개전단 메세지',
+			message: content,
+			msgcnt: 3
+		}
+	});
+
+	return function(send_count, callback){
+		console.log('gcm sned ::' + registrationIds.length);
+		sender.send(message, registrationIds, 4, function(err, result){
+			if(err) {
+				console.error('gcm send error!', err.stack);
+				callback(err);
+				return;
+			}
+			console.log('gcm send success! => ' + registrationIds.length);
+			callback(null, send_count + registrationIds.length);
 		});
 	};
 }
@@ -67,30 +94,37 @@ trycatch(function(){
 					});
 				},
 				function(targetList, callback){
-					var message = new gcm.Message({
-						collapseKey: 'EPaperNotification',
-						delayWhileIdle: true,
-						timeToLive: 3,
-						data: {
-							title: '번개전단 메세지',
-							message: content,
-							msgcnt: 3
-						}
-					});
-
 					var registrationIds = [];
+					var fns = [function(cb){
+						cb(null, 0);
+					}];
 					for(var i=0; i<targetList.length; i++){
+						if(i>0 && (i%1000) === 0){
+							fns.push(createSendGcmFunction(registrationIds));	
+							registrationIds = [];
+						}	
 						registrationIds.push(targetList[i].registration_id);
 					}
 
-					sender.send(message, registrationIds, 4, function(err, result){
-						if(err) { 
-							callbakc(err);
-							return;
+					if(registrationIds.length > 0){
+						fns.push(createSendGcmFunction(registrationIds));
+					}
+
+					async.waterfall(fns, 
+						function(err, send_count){
+							if(err){
+								console.error('message send :: error!', err.stack);
+								if(send_count && send_count > 0){
+									callback(null, send_count);
+								}else{
+									callback(err);
+								}
+								return;
+							}
+							console.log('gcm push end!');
+							callback(null, send_count);
 						}
-						console.log('message send:: gcm push success!');
-						callback(null, registrationIds.length);
-					});
+					);
 				}
 			], 
 			function(err, send_count){

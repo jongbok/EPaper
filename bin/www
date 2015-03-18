@@ -9,6 +9,8 @@ var debug = require('debug')('epaper:server');
 var http = require('http');
 var https = require('https');
 var fs = require('fs');
+var cluster = require('cluster');
+var numCPUs = require('os').cpus().length;
 
 var options = {
 	key: fs.readFileSync('../../openssl/privateKey.key'),
@@ -22,19 +24,39 @@ var options = {
 var port = normalizePort(process.env.PORT || '443');
 app.set('port', port);
 
-/**
- * Create HTTP server.
- */
+if (cluster.isMaster) {
+	for (var i = 0; i < numCPUs; i++) {
+		cluster.fork();
+	}
+	cluster.on('exit', function(deadWorker, code, signal) {
+		var worker = cluster.fork();
+		var newPID = worker.process.pid;
+		var oldPID = deadWorker.process.pid;
+		
+		console.log('worker '+oldPID+' died.');
+		console.log('worker '+newPID+' born.');	
+	});
 
-var server = https.createServer(options, app);
+	cluster.on('online', function(worker){
+		console.log('worker #{' + worker.id + '}.online #{' + worker.process.pid + '}');
+	});
+	cluster.on('listening', function(worker, address){
+		console.log('worker #{' + worker.id + '}.listening #{' + address.address + '}:#{' + address.port + '}');
+	});
+}else{
+	/**
+	 * Create HTTP server.
+	 */
+	var server = https.createServer(options, app);
 
-/**
- * Listen on provided port, on all network interfaces.
- */
+	/**
+	 * Listen on provided port, on all network interfaces.
+	 */
 
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
+	server.listen(port);
+	server.on('error', onError);
+	server.on('listening', onListening);
+}
 
 /**
  * Normalize a port into a number, string, or false.

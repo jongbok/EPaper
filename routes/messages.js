@@ -6,7 +6,6 @@ var gcm = require('node-gcm');
 var async = require('async');
 var trycatch = require('trycatch');
 var pool = mysql.createPool(config.mysql);
-var sender = new gcm.Sender(config.gcm.senderId);
 var logger = config.getLogger();
 
 var query = {
@@ -140,6 +139,31 @@ router.post('/', function(req, res, next){
 		};
 	}
 
+	function createSendGcmFunction(registrationIds, targets){
+		var sender = new gcm.Sender(config.gcm.senderId);
+		var message = new gcm.Message({
+			collapseKey: 'EPaperNotification',
+			delayWhileIdle: true,
+			timeToLive: 3,
+			data: {
+				title: '번개전단 메세지',
+				message: content,
+				msgcnt: 3
+			}
+		});
+
+		return function(sendList, callback){
+			sender.send(message, registrationIds, 4, function(err, result){
+				if(err) {
+					logger.error('gcm send error!', err.stack);
+					callback(err);
+					return;
+				}
+				callback(null, sendList.concat(targets)); 
+			});
+		};
+	}
+
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
 			if(err) { throw err; }
@@ -198,46 +222,69 @@ router.post('/', function(req, res, next){
 						});
 					},
 					function(targetList, messageId, callback){
-						var fns = [];
+						var registrationIds = [];
+						var targets = [];
+						var fns = [function(cb){
+							cb(null, []);
+						}];
+
 						for(var i=0; i<targetList.length; i++){
-							var args = [messageId, targetList[i].id];
+						        if(i>0 && (i%1000) === 0){
+								fns.push(createSendGcmFunction(registrationIds, targets));
+								registrationIds = [];
+								targets = [];
+							}
+							targets.push(targetList[i]);
+							registrationIds.push(targetList[i].registration_id);
+						}
+
+						if(registrationIds.length > 0){
+							fns.push(createSendGcmFunction(registrationIds, targets));
+						}
+
+						async.waterfall(fns,
+							function(err, sendList){
+								if(err){
+									logger.error('message send :: error![' + user_id + ']', err.stack);
+									if(sendList && sendList > 0){
+										callback(null, sendList, messageId);
+									}else{
+										callback(err);
+									}
+									return;
+								}
+								callback(null, sendList, messageId); 
+							}
+						);
+					},
+					function(sendList, messageId, callback){
+						var fns = [];
+						for(var i=0; i<sendList.length; i++){
+							var args = [messageId, sendList[i].id];
 							fns.push(createInsertMessageUserFunction(connection, args));
 						}
 						async.parallel(fns, function(err, result){
 							if(err) {
 								callback(err);
-							}else{ 
-								callback(null, targetList);
+								return;
 							}
+							logger.debug('message send :: insert message_user success![' + user_id + ']');
+							callback(null, sendList);
 						});
 					},
-					function(targetList, callback){
-						var args = [targetList.length, user_id];
+					function(sendList, callback){
+						var args = [sendList.length, user_id];
 						connection.query(query.decreaseCoin, args, function(err, result){
-							if(err) { throw err; }
-							callback(null, targetList);
+							if(err) { 
+								callback(err);
+								return;
+							}
+							logger.debug('message send :: decreate coin success![' + user_id + ']');
+							callback(null, sendList);
 						});
 					},
-					function(targetList, callback){
-						var message = new gcm.Message({
-							collapseKey: 'EPaperNotification',
-							delayWhileIdle: true,
-							timeToLive: 3,
-							data: {
-								title: '번개전단 메세지',
-								message: content,
-								msgcnt: 3
-							}
-						});
-						var registrationIds = [];
-						for(var i=0; i<targetList.length; i++){
-							registrationIds.push(targetList[i].registration_id);
-						}
-						sender.send(message, registrationIds, 4, function(err, result){
-							if(err) { throw err; }
-							logger.debug('message send:: gcm push success![' + user_id + ']');
-							callback(null, {result:'success', send_count: registrationIds.length});
-						});
+					function(sendList, callback){
+						callback(null, {result:'success', send_count: sendList.length});
 					}
 				], afterTransaction);
 			});	
