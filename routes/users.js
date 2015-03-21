@@ -13,22 +13,25 @@ var query = {
                 + "where phone_no = ? \n"
                 + "     or registration_id = ?",
 	selectById: "select * from users where id = ?",
-	updateLocation: "update users set latitude = ?, longitude = ?, update_dt =  NOW() where id = ?",
+	updateLocation: "update users set latitude = ?, longitude = ?, use_yn =1, update_dt =  NOW() where id = ?",
         updateRegIdAndLocation : "update users \n"
                 + "set registration_id = ? \n"
                 + ",latitude = ifnull(?, latitude) \n"
                 + ",longitude = ifnull(?, longitude) \n"
 		+ ",phone_no = ifnull(?, phone_no) \n"
+		+ ",use_yn = 1 \n"
 		+ ",update_dt = NOW() \n"
                 + "where id = ?",
 	updateRegistrationId : "update users \n"
 		+ "set registration_id = ? \n"
+		+ ",use_yn = 1 \n"
 		+ ",update_dt = NOW() \n"
 		+ "where id = ?",
         insert : "insert into users(phone_no, registration_id, latitude, longitude) \n"
                 + "values(?, ?, ?, ?)",
         updateRejectCnt : "update users \n"
                 + "     set reject_cnt = reject_cnt + 1 \n"
+		+ "	, use_yn = 1 \n"
                 + "     , update_dt = NOW() \n"
                 + "where id = ?",
         insertReject : "insert into user_rejects(user_id, reject_id) \n"
@@ -42,11 +45,11 @@ var query = {
 	insertCharge : "insert into charges(user_id, coin_id, paper_cnt) \n"
 		+ "values(?, ?, ?)",
 	update : "update users \n"
-		+ "set sex = ?, age = ?, update_dt = NOW() \n"
+		+ "set sex = ?, age = ?, use_yn = 1, update_dt = NOW() \n"
 		+ "where id = ?",
 	deleteReject : "delete from user_rejects where user_id = ?",
 	resetRejectCnt : "update users \n"
-		+ "set reject_cnt = 0, update_dt = NOW() \n"
+		+ "set reject_cnt = 0, use_yn = 1, update_dt = NOW() \n"
 		+ "where id = ?"
 };
 

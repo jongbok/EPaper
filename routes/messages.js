@@ -32,7 +32,8 @@ var query = {
 			+ "where not exists(select 'x' \n"
 			+ "		from user_rejects b \n"
 			+ "		where a.id = b.user_id \n"
-			+ "			and b.reject_id = ?) \n";
+			+ "			and b.reject_id = ?) \n"
+			+ "and use_yn = 1 \n";
 		if(distance && distance > 0){
 			sql += "        and ( 6371 * acos( cos( radians(" + connection.escape(latitude) + ") ) * cos( radians( latitude ) ) \n";
 			sql += "          * cos( radians( longitude ) - radians(" + connection.escape(longitude) + ") ) \n";
@@ -144,9 +145,9 @@ router.post('/', function(req, res, next){
 	function createSendGcmFunction(registrationIds, targets){
 		var sender = new gcm.Sender(config.gcm.senderId);
 		var message = new gcm.Message({
-			collapseKey: 'EPaperNotification',
+			collapseKey: (new Date()).getTime() + '', 
 			delayWhileIdle: true,
-			timeToLive: 3,
+			timeToLive: 300,
 			data: {
 				title: '번개전단 메세지',
 				message: content,
@@ -180,14 +181,6 @@ router.post('/', function(req, res, next){
 							if(!results || results.length !== 1){
 								throw new Error('사용자정보가 존재하지 않습니다.[' + user_id + ']');
 							}
-							if(results[0].paper_coin < paper_cnt){
-								logger.error('코인이 부족해서 발송할 수 없습니다.[id:' + user_id 
-										+ ',보유:' + results[0].paper_coin + ',요청:' + paper_cnt + ']');
-								var err = new Error('코인이 부족해서 발송할 수 없습니다.');
-								err.isCustom = true;
-								callback(err);
-								return;
-							}
 							logger.debug('message send:: select user info success[' + user_id + ']');
 							callback(null, results[0]);
 						});
@@ -209,7 +202,15 @@ router.post('/', function(req, res, next){
 								logger.error('조건에 해당하는 사용자가 존재하지 않습니다.[user_id:' + user_id + ']');
 								var err = new Error('조건에 해당하는 사용자가 존재하지 않습니다.');
 								err.isCustom = true;	
-								callback(err);
+								throw err;
+								return;
+							}
+							if(user.paper_coin < paper_cnt){
+								logger.error('보유중인 전단지가 부족해서 발송할 수 없습니다.[id:' + user_id
+									+ ',보유:' + user.paper_coin + ',요청:' + paper_cnt + ']');
+								var err = new Error('보유중인 전단지가 부족해서 발송할 수 없습니다.');
+								err.isCustom = true;
+								throw err;
 								return;
 							}
 							logger.debug('message send:: select target list success[' + user_id + ']');
@@ -295,7 +296,11 @@ router.post('/', function(req, res, next){
 	},
 	function(err){
 		logger.error('message send:: error![' + user_id + ']', err.stack);
-		res.json({result:'fail'});
+		if(err.isCustom){
+			res.json({result:'fail', message:err.message});
+		}else{
+			res.json({result:'fail'});
+		}
 	});
 
 });
