@@ -45,7 +45,7 @@ var query = {
 	insertCharge : "insert into charges(user_id, coin_id, paper_cnt) \n"
 		+ "values(?, ?, ?)",
 	update : "update users \n"
-		+ "set sex = ?, age = ?, use_yn = 1, update_dt = NOW() \n"
+		+ "set sex = ?, name = ?, age = ?, use_yn = 1, update_dt = NOW() \n"
 		+ "where id = ?",
 	deleteReject : "delete from user_rejects where user_id = ?",
 	resetRejectCnt : "update users \n"
@@ -285,12 +285,13 @@ router.put('/:id', function(req, res, next){
 	var user_id = req.params.id;
 	var sex = req.body.sex;
 	var age = req.body.age;
+	var name = req.body.name;
 
 	trycatch(function(){
 		pool.getConnection(function(err, connection) {
 			if(err) { throw err; }
 
-			var args = [sex, age, user_id];
+			var args = [sex, name, age, user_id];
 			connection.query(query.update, args, function(err, result){
 				connection.release();
 				if(err){ throw err; }

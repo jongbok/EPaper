@@ -10,7 +10,8 @@ var logger = config.getLogger();
 
 var query = {
 	selectReceive : "select \n"
-		+ "	  a.phone_no \n"
+		+ "	  a.id	\n"
+		+ "	, a.phone_no \n"
 		+ "	, DATE_FORMAT(a.create_dt, '%Y-%m-%d %H:%i:%s') as create_dt \n"
 		+ "	, a.content \n"
 		+ "	, b.message_id \n"
@@ -273,10 +274,10 @@ router.post('/', function(req, res, next){
 								return;
 							}
 							logger.debug('message send :: insert message_user success![' + user_id + ']');
-							callback(null, sendList);
+							callback(null, sendList, messageId);
 						});
 					},
-					function(sendList, callback){
+					function(sendList, messageId, callback){
 						var args = [sendList.length, user_id];
 						connection.query(query.decreaseCoin, args, function(err, result){
 							if(err) { 
@@ -284,11 +285,11 @@ router.post('/', function(req, res, next){
 								return;
 							}
 							logger.debug('message send :: decreate coin success![' + user_id + ']');
-							callback(null, sendList);
+							callback(null, sendList, messageId);
 						});
 					},
-					function(sendList, callback){
-						callback(null, {result:'success', send_count: sendList.length});
+					function(sendList, messageId, callback){
+						callback(null, {result:'success', id: messageId, send_count: sendList.length});
 					}
 				], afterTransaction);
 			});	

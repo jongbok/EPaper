@@ -66,7 +66,6 @@ app.use(function(req, res, next){
 	}
 	next();
 });
-
 app.use('/users', users);
 app.use('/messages', messages);
 
