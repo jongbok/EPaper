@@ -77,10 +77,11 @@ var chat = function(server){
 				socket.isOwner = false;
 				socket.join(data.roomId);
 				io.sockets.in(data.roomId).emit('joined', data); 
+				logger.debug('chat:: joined![' + data.roomId + ',' + data.userId + ']');
 			}else{
 				socket.emit('end');
+				logger.debug('chat:: end![' + data.roomId + ',' + data.userId + ']');
 			}
-			logger.debug('chat:: joined![' + data.roomId + ',' + data.userId + ']');
 		});
 
 		socket.on('send', function(data){

@@ -146,9 +146,8 @@ router.post('/', function(req, res, next){
 	function createSendGcmFunction(registrationIds, targets){
 		var sender = new gcm.Sender(config.gcm.senderId);
 		var message = new gcm.Message({
-			collapseKey: (new Date()).getTime() + '', 
-			delayWhileIdle: true,
-			timeToLive: 300,
+			delayWhileIdle: false,
+			timeToLive: 1800,
 			data: {
 				title: '번개전단 메세지',
 				message: content,
